@@ -1,16 +1,53 @@
 <script>
+	import { onMount } from 'svelte';
 	import { mapConfig } from '$lib/stores/config-map';
 	import { translations } from '$lib/stores/translations';
 
 	let repoName = '';
+	let selectedRepoName = '';
+	let mapRepositories = [];
 	let errorMessage = null;
 	let successMessage = null;
 	let isLoading = false;
+	let isLoadingRepos = false;
+	let isLoadingSelectedRepo = false;
 	let repoUrl = null;
 	let deploymentUrl = null;
 	let embedUrl = null;
 
-	// Function to convert string to slug
+	const TOTAL_LANGUAGES = 24;
+
+	const createSteps = [
+		{ id: 'validate', text: 'Validating repository name', completed: false, current: false },
+		{ id: 'create', text: 'Creating GitHub repository', completed: false, current: false },
+		{
+			id: 'translations',
+			text: 'Committing language files (0%)',
+			completed: false,
+			current: false
+		},
+		{ id: 'cleanup', text: 'Cleaning up temporary files', completed: false, current: false },
+		{ id: 'deploy', text: 'Deploying to Vercel', completed: false, current: false }
+	];
+
+	const updateSteps = [
+		{ id: 'validate', text: 'Validating selected repository', completed: false, current: false },
+		{ id: 'translations', text: 'Generating translations (0%)', completed: false, current: false },
+		{ id: 'commit', text: 'Committing map update', completed: false, current: false },
+		{ id: 'cleanup', text: 'Cleaning up temporary files', completed: false, current: false },
+		{ id: 'deploy', text: 'Waiting for Vercel auto-deploy', completed: false, current: false }
+	];
+
+	let steps = cloneSteps(createSteps);
+
+	onMount(() => {
+		loadRepositories();
+	});
+
+	function cloneSteps(source) {
+		return source.map((step) => ({ ...step }));
+	}
+
 	function toSlug(str) {
 		return str
 			.toLowerCase()
@@ -25,30 +62,14 @@
 		return `<iframe title="New Map" aria-label="Map" id="${slugifiedId}" src="${deployUrl}" scrolling="no" frameborder="0" style="width: 0; min-width: 100% !important; border: none;" height="624"></iframe><script type="text/javascript">window.addEventListener("message",e=>{if("${embedUrl}"!==e.origin)return;let t=e.data;if(t.height){document.getElementById("${slugifiedId}").height=t.height+"px"}},!1)<\/script>`;
 	}
 
-	// Add to your steps array at the top:
-	let steps = [
-		{ id: 'validate', text: 'Validating repository name', completed: false, current: false },
-		{ id: 'create', text: 'Creating GitHub repository', completed: false, current: false },
-		{
-			id: 'translations',
-			text: 'Committing language files (0%)',
-			completed: false,
-			current: false
-		},
-		{ id: 'cleanup', text: 'Cleaning up temporary files', completed: false, current: false },
-		{ id: 'deploy', text: 'Deploying to Vercel', completed: false, current: false }
-	];
-
 	function validateData(repoName, mapConfig, translations) {
 		if (!repoName) throw new Error('Repository name is required');
 		if (!mapConfig) throw new Error('Map configuration is required');
 
-		// Ensure translations is an object if present
 		if (translations && typeof translations !== 'object') {
 			throw new Error('Invalid translations format');
 		}
 
-		// Validate repository name format
 		if (!/^[a-zA-Z0-9-_]+$/.test(repoName)) {
 			throw new Error(
 				'Invalid repository name. Use only letters, numbers, hyphens, and underscores.'
@@ -64,16 +85,130 @@
 		}));
 	}
 
-	// Add this to your handleSubmit function
+	function buildSourceData(config) {
+		return {
+			...config.translate,
+			title: config.title,
+			subtitle: config.subtitle,
+			textSourceDescription: config.textSourceDescription,
+			textSource: config.textSource,
+			textNoteDescription: config.textNoteDescription,
+			textNote: config.textNote,
+			linkDataAccessDescription: config.linkDataAccessDescription,
+			legend1: config.legend1,
+			customUnitLabel: config.customUnitLabel,
+			tooltipExtraInfoLabel: config.tooltipExtraInfoLabel || 'Click here',
+			...(config.parsedData || []).reduce((acc, country) => {
+				if (country.text_content) {
+					acc[`extraInfo_${country.id}`] = country.text_content;
+				}
+				return acc;
+			}, {})
+		};
+	}
+
+	async function loadRepositories() {
+		isLoadingRepos = true;
+
+		try {
+			const response = await fetch('/api/map-repositories');
+			const data = await readJsonResponse(response);
+			if (!response.ok) {
+				throw new Error(data.error || 'Failed to load repositories');
+			}
+			mapRepositories = data.repositories || [];
+		} catch (error) {
+			console.error('Failed to load repositories:', error);
+			errorMessage = error.message;
+		} finally {
+			isLoadingRepos = false;
+		}
+	}
+
+	async function loadSelectedRepository() {
+		if (!selectedRepoName) return;
+
+		isLoadingSelectedRepo = true;
+		errorMessage = null;
+		successMessage = null;
+		repoUrl = null;
+		deploymentUrl = null;
+		embedUrl = null;
+
+		try {
+			const data = await makeRequest('/api/load-map-repository', {
+				repoName: selectedRepoName
+			});
+
+			mapConfig.set(data.config);
+			translations.set({});
+			repoUrl = data.repoUrl;
+			successMessage = `Loaded ${selectedRepoName}. You can now edit the map and update it.`;
+		} catch (error) {
+			console.error('Failed to load selected repository:', error);
+			errorMessage = error.message;
+		} finally {
+			isLoadingSelectedRepo = false;
+		}
+	}
+
+	async function generateTranslations() {
+		const sourceData = buildSourceData($mapConfig);
+		let batchIndex = 0;
+		let hasMore = true;
+		let allTranslations = {};
+		let completedLanguages = [];
+
+		while (hasMore) {
+			const data = await makeRequest('/api/translate', {
+				sourceObject: sourceData,
+				batchIndex
+			});
+
+			if (!data.success) {
+				throw new Error(data.error || 'Translation failed');
+			}
+
+			if (data.completedLanguages) {
+				completedLanguages = [...new Set([...completedLanguages, ...data.completedLanguages])];
+			}
+
+			allTranslations = { ...allTranslations, ...data.translations };
+			translations.set(allTranslations);
+
+			const progress = Math.round((completedLanguages.length / TOTAL_LANGUAGES) * 100);
+			steps = steps.map((step) => ({
+				...step,
+				text:
+					step.id === 'translations'
+						? `Generating translations (${progress}%)`
+						: step.text
+			}));
+
+			hasMore = data.type === 'complete' ? false : data.hasMore;
+			batchIndex++;
+		}
+
+		if (Object.keys(allTranslations).length !== TOTAL_LANGUAGES) {
+			throw new Error('Translation did not produce all language files');
+		}
+
+		return allTranslations;
+	}
+
 	async function handleSubmit() {
+		steps = cloneSteps(createSteps);
 		isLoading = true;
 		errorMessage = null;
 		successMessage = null;
 		repoUrl = null;
+		deploymentUrl = null;
+		embedUrl = null;
 		const processedLanguages = new Set();
 
 		try {
-			// Validate and initialize repository
+			validateData(repoName, $mapConfig, $translations);
+
 			updateSteps('create', ['validate']);
 			const initData = await makeRequest('/api/init-repository', {
 				repoName,
@@ -81,17 +216,14 @@
 			});
 			repoUrl = initData.repoUrl;
 
-			// Process files in small batches
 			updateSteps('translations', ['validate', 'create']);
 			const BATCH_SIZE = 6;
 			const languages = Object.keys($translations);
-			// console.log(`Starting to process ${languages.length} languages in batches of ${BATCH_SIZE}`);
 
 			for (let i = 0; i < languages.length; i += BATCH_SIZE) {
 				const batchLanguages = languages.slice(i, i + BATCH_SIZE);
 				const progress = Math.round(((i + batchLanguages.length) / languages.length) * 100);
 
-				// Update progress in steps
 				steps = steps.map((step) => ({
 					...step,
 					text:
@@ -100,7 +232,6 @@
 							: step.text
 				}));
 
-				// Process batch
 				const batchTranslations = {};
 				batchLanguages.forEach((lang) => {
 					batchTranslations[lang] = $translations[lang];
@@ -113,18 +244,14 @@
 						isLastBatch: i + BATCH_SIZE >= languages.length
 					});
 
-					// Mark languages as processed
 					batchLanguages.forEach((lang) => processedLanguages.add(lang));
-					// console.log(`Completed batch with languages: ${batchLanguages.join(', ')}`);
 
-					// Add small delay between batches
 					if (i + BATCH_SIZE < languages.length) {
 						await new Promise((resolve) => setTimeout(resolve, 500));
 					}
 				} catch (error) {
 					console.error(`Batch processing failed, falling back to single file processing:`, error);
 
-					// Fallback to single file processing for this batch
 					for (const lang of batchLanguages) {
 						try {
 							await makeRequest('/api/commit-files', {
@@ -133,27 +260,22 @@
 								isLastFile: lang === languages[languages.length - 1]
 							});
 							processedLanguages.add(lang);
-							console.log(`Processed single language: ${lang}`);
 						} catch (singleError) {
 							console.error(`Failed to process language ${lang}:`, singleError);
 						}
 					}
 				}
 
-				// Update progress message
 				successMessage = `Processed ${processedLanguages.size} of ${languages.length} languages...`;
 			}
 
-			// Verify all languages were processed
 			const missingLanguages = languages.filter((lang) => !processedLanguages.has(lang));
 			if (missingLanguages.length > 0) {
-				console.error('Missing languages:', missingLanguages);
 				throw new Error(
 					`Failed to process ${missingLanguages.length} languages: ${missingLanguages.join(', ')}`
 				);
 			}
 
-			// Clean up storage
 			updateSteps('cleanup', ['validate', 'create', 'translations']);
 			try {
 				const cleanupResponse = await makeRequest('/api/cleanup-storage', {});
@@ -165,7 +287,6 @@
 				successMessage += '\nWarning: Storage cleanup failed. Some temporary files may remain.';
 			}
 
-			// Deploy to Vercel
 			updateSteps('deploy', ['validate', 'create', 'translations', 'cleanup']);
 			const deployData = await makeRequest('/api/deploy-vercel', { repoName });
 
@@ -173,13 +294,13 @@
 			embedUrl = deployData.projectUrl;
 			updateSteps(null, ['validate', 'create', 'translations', 'cleanup', 'deploy']);
 			successMessage = 'Repository created and deployed successfully!';
+			await loadRepositories();
 		} catch (error) {
 			console.error('Error:', error);
-			if (processedLanguages.size > 0) {
-				errorMessage = `${error.message}. Successfully processed languages: ${Array.from(processedLanguages).join(', ')}`;
-			} else {
-				errorMessage = error.message;
-			}
+			errorMessage =
+				processedLanguages.size > 0
+					? `${error.message}. Successfully processed languages: ${Array.from(processedLanguages).join(', ')}`
+					: error.message;
 			steps = steps.map((step) => ({
 				...step,
 				completed: false,
@@ -190,7 +311,66 @@
 		}
 	}
 
-	// Helper function to handle request errors
+	async function handleUpdateAndDeploy() {
+		steps = cloneSteps(updateSteps);
+		isLoading = true;
+		errorMessage = null;
+		successMessage = null;
+		deploymentUrl = null;
+		embedUrl = null;
+
+		try {
+			validateData(selectedRepoName, $mapConfig, $translations);
+
+			updateSteps('translations', ['validate']);
+			const generatedTranslations = await generateTranslations();
+
+			updateSteps('commit', ['validate', 'translations']);
+			const updateData = await makeRequest('/api/update-map-repository', {
+				repoName: selectedRepoName,
+				mapConfig: $mapConfig,
+				translations: generatedTranslations
+			});
+
+			repoUrl = updateData.repoUrl;
+			deploymentUrl = updateData.projectUrl;
+			embedUrl = updateData.projectUrl;
+
+			updateSteps('cleanup', ['validate', 'translations', 'commit']);
+			try {
+				await makeRequest('/api/cleanup-storage', {});
+			} catch (cleanupError) {
+				console.error('Storage cleanup failed:', cleanupError);
+			}
+
+			updateSteps(null, ['validate', 'translations', 'commit', 'cleanup', 'deploy']);
+			successMessage = 'Map updated. Vercel will deploy the latest commit from GitHub.';
+			await loadRepositories();
+		} catch (error) {
+			console.error('Update error:', error);
+			errorMessage = error.message;
+			steps = steps.map((step) => ({
+				...step,
+				completed: false,
+				current: false
+			}));
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	async function readJsonResponse(response) {
+		const textData = await response.text();
+		try {
+			return JSON.parse(textData);
+		} catch {
+			if (response.status === 504) {
+				throw new Error('Request timeout - will retry');
+			}
+			throw new Error(textData || 'Invalid response format');
+		}
+	}
+
 	async function makeRequest(url, data) {
 		const MAX_RETRIES = 3;
 		let lastError;
@@ -205,18 +385,7 @@
 					body: JSON.stringify(data)
 				});
 
-				// Handle non-JSON responses
-				const textData = await response.text();
-				let jsonData;
-
-				try {
-					jsonData = JSON.parse(textData);
-				} catch (parseError) {
-					if (response.status === 504) {
-						throw new Error('Request timeout - will retry');
-					}
-					throw new Error(textData || 'Invalid response format');
-				}
+				const jsonData = await readJsonResponse(response);
 
 				if (!response.ok) {
 					throw new Error(jsonData.error || 'Request failed');
@@ -227,7 +396,6 @@
 				console.error(`Attempt ${attempt + 1} failed:`, error);
 				lastError = error;
 
-				// If this isn't the last attempt, wait before retrying
 				if (attempt < MAX_RETRIES - 1) {
 					await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
 					continue;
@@ -239,12 +407,33 @@
 	}
 </script>
 
-<!-- Rest of your component template remains the same -->
 <div class="rounded-lg bg-white p-6 text-left shadow-sm">
-	<h3 class="mb-2 font-bold">Create Map</h3>
+	<h3 class="mb-4 font-bold">Create or Update Map</h3>
+
+	<div class="mb-6 space-y-3 border-b pb-4">
+		<label for="existingRepo" class="block font-medium">Update existing map</label>
+		<select
+			id="existingRepo"
+			bind:value={selectedRepoName}
+			on:change={loadSelectedRepository}
+			disabled={isLoading || isLoadingRepos}
+			class="w-full rounded border p-2"
+		>
+			<option value="">
+				{isLoadingRepos ? 'Loading map repositories...' : 'Select a compatible map repository'}
+			</option>
+			{#each mapRepositories as repo}
+				<option value={repo.name}>{repo.name}</option>
+			{/each}
+		</select>
+		{#if isLoadingSelectedRepo}
+			<p class="text-sm text-gray-600">Loading selected map...</p>
+		{/if}
+	</div>
+
 	<form on:submit|preventDefault={handleSubmit} class="space-y-4">
 		<div>
-			<label for="repoName" class="mb-2 block">Please enter a repository name below:</label>
+			<label for="repoName" class="mb-2 block">Please enter a new repository name below:</label>
 			<input
 				type="text"
 				id="repoName"
@@ -255,17 +444,31 @@
 			/>
 		</div>
 
-		<button
-			type="submit"
-			disabled={isLoading}
-			class="w-full min-w-[200px] rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-70"
-		>
-			{#if isLoading}
-				<span class="spinner"></span>
-			{:else}
-				Create and Deploy Map
-			{/if}
-		</button>
+		<div class="grid gap-3 md:grid-cols-2">
+			<button
+				type="submit"
+				disabled={isLoading}
+				class="min-w-[200px] rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-70"
+			>
+				{#if isLoading}
+					<span class="spinner"></span>
+				{:else}
+					Create and Deploy Map
+				{/if}
+			</button>
+			<button
+				type="button"
+				on:click={handleUpdateAndDeploy}
+				disabled={isLoading || isLoadingSelectedRepo || !selectedRepoName}
+				class="min-w-[200px] rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-70"
+			>
+				{#if isLoading}
+					<span class="spinner"></span>
+				{:else}
+					Update and Deploy Map
+				{/if}
+			</button>
+		</div>
 	</form>
 
 	{#if isLoading || steps.some((step) => step.completed)}
@@ -313,14 +516,16 @@
 						<p class="mb-2 font-bold">Embed code:</p>
 						<div class="relative">
 							<pre class="overflow-x-auto rounded bg-gray-100 p-3 text-sm">{getEmbedCode(
-									repoName,
+									selectedRepoName || repoName,
 									deploymentUrl,
 									embedUrl
 								)}</pre>
 							<button
 								class="absolute right-2 top-2 rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600"
 								on:click={() => {
-									navigator.clipboard.writeText(getEmbedCode(repoName, deploymentUrl, embedUrl));
+									navigator.clipboard.writeText(
+										getEmbedCode(selectedRepoName || repoName, deploymentUrl, embedUrl)
+									);
 								}}
 							>
 								Copy

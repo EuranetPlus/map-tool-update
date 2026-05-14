@@ -2,7 +2,6 @@
 <script>
 	import { mapConfig } from '$lib/stores/config-map';
 	import { shouldUpdateMap } from '$lib/stores/update-map';
-	import { dataReady } from '$lib/stores/shared';
 	import { csvParse } from 'd3-dsv';
 	import { writable } from 'svelte/store';
 	import { translations } from '$lib/stores/translations';
@@ -146,6 +145,48 @@ Slovakia,SK,0.066,FALSE,,,,,,,,,`;
 	let customUnitLabelAvailable = $mapConfig.customUnitLabelAvailable;
 	let customUnitLabel = $mapConfig.customUnitLabel;
 	let tooltipExtraInfoLabel = $mapConfig.tooltipExtraInfoLabel;
+	let lastSyncedConfig = null;
+
+	function syncLocalFields(config) {
+		title = config.title || '';
+		subtitle = config.subtitle || '';
+		data = config.data || '';
+		datasetType = config.datasetType || 'values';
+		datasetUnit = config.datasetUnit || 'percent';
+		percentRounded = Boolean(config.percentRounded);
+		colourSchemeType = config.colourSchemeType || 'sequential';
+		colourScheme = config.colourScheme || 'red';
+		colourSchemeReverse = Boolean(config.colourSchemeReverse);
+		colourSchemeClasses = config.colourSchemeClasses || 5;
+		headlineAvailable = config.headlineAvailable ?? true;
+		subheadlineAvailable = config.subheadlineAvailable ?? true;
+		tooltipAvailable = config.tooltipAvailable ?? true;
+		scaleBarAvailable = config.scaleBarAvailable ?? true;
+		overrideScaleValues = Boolean(config.overrideScaleValues);
+		legendAvailable = config.legendAvailable ?? true;
+		textSourceAvailable = config.textSourceAvailable ?? true;
+		textSourceDescription = config.textSourceDescription || 'Source';
+		textSource = config.textSource || '';
+		textNoteAvailable = config.textNoteAvailable ?? true;
+		textNoteDescription = config.textNoteDescription || 'Note';
+		textNote = config.textNote || '';
+		textDataAccessAvailable = config.textDataAccessAvailable ?? true;
+		linkDataAccessDescription = config.linkDataAccessDescription || 'Access the data';
+		linkDataAccess = config.linkDataAccess || '';
+		legend1 = config.legend1 || 'No data available';
+		legend1Color = config.legend1Color || '#E0E0E0';
+		colorBarFirstValue = config.colorBarFirstValue;
+		colorBarLastValue = config.colorBarLastValue;
+		parsedData = config.parsedData || null;
+		customUnitLabelAvailable = Boolean(config.customUnitLabelAvailable);
+		customUnitLabel = config.customUnitLabel || '';
+		tooltipExtraInfoLabel = config.tooltipExtraInfoLabel || '';
+	}
+
+	$: if ($mapConfig && $mapConfig !== lastSyncedConfig) {
+		lastSyncedConfig = $mapConfig;
+		syncLocalFields($mapConfig);
+	}
 
 	$: configObject =
 		$shouldUpdateMap && $shouldInitialize
@@ -348,10 +389,6 @@ Slovakia,SK,0.066,FALSE,,,,,,,,,`;
 	}
 
 	// Function to handle number input changes
-	function handleNumberChange(property, value) {
-		updateStoreProperty(property, Number(value));
-	}
-
 	let translationLoading = false;
 	let translationError = null;
 	let translatedLanguages = [];
