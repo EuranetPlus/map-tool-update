@@ -30,7 +30,7 @@
 		{ id: 'deploy', text: 'Deploying to Vercel', completed: false, current: false }
 	];
 
-	const updateSteps = [
+	const updateFlowSteps = [
 		{ id: 'validate', text: 'Validating selected repository', completed: false, current: false },
 		{ id: 'translations', text: 'Generating translations (0%)', completed: false, current: false },
 		{ id: 'commit', text: 'Committing map update', completed: false, current: false },
@@ -77,7 +77,7 @@
 		}
 	}
 
-	function updateSteps(currentStep, completedSteps = []) {
+	function updateProgressSteps(currentStep, completedSteps = []) {
 		steps = steps.map((step) => ({
 			...step,
 			completed: completedSteps.includes(step.id),
@@ -209,14 +209,14 @@
 		try {
 			validateData(repoName, $mapConfig, $translations);
 
-			updateSteps('create', ['validate']);
+			updateProgressSteps('create', ['validate']);
 			const initData = await makeRequest('/api/init-repository', {
 				repoName,
 				mapConfig: $mapConfig
 			});
 			repoUrl = initData.repoUrl;
 
-			updateSteps('translations', ['validate', 'create']);
+			updateProgressSteps('translations', ['validate', 'create']);
 			const BATCH_SIZE = 6;
 			const languages = Object.keys($translations);
 
@@ -276,7 +276,7 @@
 				);
 			}
 
-			updateSteps('cleanup', ['validate', 'create', 'translations']);
+			updateProgressSteps('cleanup', ['validate', 'create', 'translations']);
 			try {
 				const cleanupResponse = await makeRequest('/api/cleanup-storage', {});
 				if (cleanupResponse.remainingBlobs > 0) {
@@ -287,12 +287,12 @@
 				successMessage += '\nWarning: Storage cleanup failed. Some temporary files may remain.';
 			}
 
-			updateSteps('deploy', ['validate', 'create', 'translations', 'cleanup']);
+			updateProgressSteps('deploy', ['validate', 'create', 'translations', 'cleanup']);
 			const deployData = await makeRequest('/api/deploy-vercel', { repoName });
 
 			deploymentUrl = deployData.projectUrl;
 			embedUrl = deployData.projectUrl;
-			updateSteps(null, ['validate', 'create', 'translations', 'cleanup', 'deploy']);
+			updateProgressSteps(null, ['validate', 'create', 'translations', 'cleanup', 'deploy']);
 			successMessage = 'Repository created and deployed successfully!';
 			await loadRepositories();
 		} catch (error) {
@@ -312,7 +312,7 @@
 	}
 
 	async function handleUpdateAndDeploy() {
-		steps = cloneSteps(updateSteps);
+		steps = cloneSteps(updateFlowSteps);
 		isLoading = true;
 		errorMessage = null;
 		successMessage = null;
@@ -322,10 +322,10 @@
 		try {
 			validateData(selectedRepoName, $mapConfig, $translations);
 
-			updateSteps('translations', ['validate']);
+			updateProgressSteps('translations', ['validate']);
 			const generatedTranslations = await generateTranslations();
 
-			updateSteps('commit', ['validate', 'translations']);
+			updateProgressSteps('commit', ['validate', 'translations']);
 			const updateData = await makeRequest('/api/update-map-repository', {
 				repoName: selectedRepoName,
 				mapConfig: $mapConfig,
@@ -336,14 +336,14 @@
 			deploymentUrl = updateData.projectUrl;
 			embedUrl = updateData.projectUrl;
 
-			updateSteps('cleanup', ['validate', 'translations', 'commit']);
+			updateProgressSteps('cleanup', ['validate', 'translations', 'commit']);
 			try {
 				await makeRequest('/api/cleanup-storage', {});
 			} catch (cleanupError) {
 				console.error('Storage cleanup failed:', cleanupError);
 			}
 
-			updateSteps(null, ['validate', 'translations', 'commit', 'cleanup', 'deploy']);
+			updateProgressSteps(null, ['validate', 'translations', 'commit', 'cleanup', 'deploy']);
 			successMessage = 'Map updated. Vercel will deploy the latest commit from GitHub.';
 			await loadRepositories();
 		} catch (error) {
