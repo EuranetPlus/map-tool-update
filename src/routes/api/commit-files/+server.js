@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { Octokit } from '@octokit/rest';
-import { GITHUB_TOKEN } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 
 async function commitSingleFile(octokit, user, repoName, lang, content) {
 	const path = `static/languages/${lang}.json`;
@@ -45,11 +45,11 @@ export async function POST({ request }) {
 			`Processing ${languages.length} files for repo: ${repoName}, isLastBatch: ${isLastBatch}`
 		);
 
-		if (!GITHUB_TOKEN) {
+		if (!env.GITHUB_TOKEN) {
 			throw new Error('GitHub token not configured');
 		}
 
-		const octokit = new Octokit({ auth: GITHUB_TOKEN });
+		const octokit = new Octokit({ auth: env.GITHUB_TOKEN });
 		const { data: user } = await octokit.users.getAuthenticated();
 
 		// Process each language in the batch

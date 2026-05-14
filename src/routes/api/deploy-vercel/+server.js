@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { GITHUB_TOKEN, GITHUB_USERNAME } from '$env/static/private';
 import { Octokit } from '@octokit/rest';
 
 // Constants
@@ -41,7 +40,7 @@ export async function POST({ request }) {
 	try {
 		// Get tokens and validate environment variables
 		const token = getVercelToken();
-		if (!token || !GITHUB_TOKEN || !GITHUB_USERNAME) {
+		if (!token || !env.GITHUB_TOKEN || !env.GITHUB_USERNAME) {
 			throw new Error('Missing required environment variables');
 		}
 
@@ -54,8 +53,8 @@ export async function POST({ request }) {
 		console.log('Starting Vercel deployment process...');
 
 		// Initialize Octokit and wait for repo
-		const octokit = new Octokit({ auth: GITHUB_TOKEN });
-		const repo = await waitForRepo(octokit, GITHUB_USERNAME, repoName);
+		const octokit = new Octokit({ auth: env.GITHUB_TOKEN });
+		const repo = await waitForRepo(octokit, env.GITHUB_USERNAME, repoName);
 
 		// Create Vercel project
 		const projectResponse = await fetch('https://api.vercel.com/v9/projects', {
@@ -69,7 +68,7 @@ export async function POST({ request }) {
 				framework: 'svelte',
 				gitRepository: {
 					type: 'github',
-					repo: `${GITHUB_USERNAME}/${repoName}`,
+					repo: `${env.GITHUB_USERNAME}/${repoName}`,
 					repoId: repo.id.toString()
 				},
 				buildCommand: 'npm run build',
@@ -78,13 +77,13 @@ export async function POST({ request }) {
 				environmentVariables: [
 					{
 						key: 'GITHUB_TOKEN',
-						value: GITHUB_TOKEN,
+						value: env.GITHUB_TOKEN,
 						type: 'encrypted',
 						target: ['production', 'preview', 'development']
 					},
 					{
 						key: 'GITHUB_USERNAME',
-						value: GITHUB_USERNAME,
+						value: env.GITHUB_USERNAME,
 						type: 'plain',
 						target: ['production', 'preview', 'development']
 					}
@@ -109,7 +108,7 @@ export async function POST({ request }) {
 				project: projectData.id,
 				gitSource: {
 					type: 'github',
-					repo: `${GITHUB_USERNAME}/${repoName}`,
+					repo: `${env.GITHUB_USERNAME}/${repoName}`,
 					ref: 'main',
 					repoId: repo.id.toString()
 				}

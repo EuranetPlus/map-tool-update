@@ -1,23 +1,23 @@
 import { Octokit } from '@octokit/rest';
-import { GITHUB_TOKEN, GITHUB_USERNAME } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 
 const CONFIG_PATH = 'src/lib/stores/config-map.js';
 const EXCLUDED_REPOS = new Set(['map-tool', 'map-tool-update']);
 
 export function getOctokit() {
-	if (!GITHUB_TOKEN) {
+	if (!env.GITHUB_TOKEN) {
 		throw new Error('GitHub token not configured');
 	}
 
-	return new Octokit({ auth: GITHUB_TOKEN });
+	return new Octokit({ auth: env.GITHUB_TOKEN });
 }
 
 export function getRepoOwner() {
-	if (!GITHUB_USERNAME) {
+	if (!env.GITHUB_USERNAME) {
 		throw new Error('GitHub username not configured');
 	}
 
-	return GITHUB_USERNAME;
+	return env.GITHUB_USERNAME;
 }
 
 export function isCandidateMapRepo(repo) {

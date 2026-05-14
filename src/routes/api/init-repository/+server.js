@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { Octokit } from '@octokit/rest';
-import { GITHUB_TOKEN } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 
 // Constants
 const MAX_RETRIES = 2;
@@ -98,11 +98,11 @@ export async function POST({ request }) {
 		const { repoName, mapConfig } = await request.json();
 		console.log('Starting repository initialization for:', repoName);
 
-		if (!GITHUB_TOKEN) {
+		if (!env.GITHUB_TOKEN) {
 			throw new Error('GitHub token not configured');
 		}
 
-		const octokit = new Octokit({ auth: GITHUB_TOKEN });
+		const octokit = new Octokit({ auth: env.GITHUB_TOKEN });
 		const { data: user } = await octokit.users.getAuthenticated();
 
 		// Create and setup repository
