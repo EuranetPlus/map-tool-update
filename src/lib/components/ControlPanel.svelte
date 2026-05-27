@@ -146,6 +146,7 @@ Slovakia,SK,0.066,FALSE,,,,,,,,,`;
 	let customUnitLabel = $mapConfig.customUnitLabel;
 	let tooltipExtraInfoLabel = $mapConfig.tooltipExtraInfoLabel;
 	let lastSyncedConfig = null;
+	let skipNextConfigSync = false;
 
 	function syncLocalFields(config) {
 		title = config.title || '';
@@ -185,7 +186,11 @@ Slovakia,SK,0.066,FALSE,,,,,,,,,`;
 
 	$: if ($mapConfig && $mapConfig !== lastSyncedConfig) {
 		lastSyncedConfig = $mapConfig;
-		syncLocalFields($mapConfig);
+		if (skipNextConfigSync) {
+			skipNextConfigSync = false;
+		} else {
+			syncLocalFields($mapConfig);
+		}
 	}
 
 	$: configObject =
@@ -256,8 +261,6 @@ Slovakia,SK,0.066,FALSE,,,,,,,,,`;
 		shouldInitialize.set(false);
 	}
 
-	$: data && handleCSVChange(data);
-
 	function handleCSVChange(csvText) {
 		csvError = null;
 		csvWarnings = [];
@@ -276,7 +279,7 @@ Slovakia,SK,0.066,FALSE,,,,,,,,,`;
 			const missingColumns = REQUIRED_COLUMNS.filter((col) => !parsed.columns.includes(col));
 			if (missingColumns.length > 0) {
 				csvError = `Missing required columns: ${missingColumns.join(', ')}`;
-				mapConfig.update((m) => ({ ...m, parsedData: null })); // Reset map data
+				updateStoreProperty('parsedData', null);
 				return;
 			}
 
@@ -485,6 +488,7 @@ Slovakia,SK,0.066,FALSE,,,,,,,,,`;
 
 	// Create a function that handles updates for all text-related properties
 	function updateStoreProperty(property, value) {
+		skipNextConfigSync = true;
 		mapConfig.update((curr) => {
 			// Special handling for headline and subheadline availability
 			const updates = {
@@ -508,6 +512,12 @@ Slovakia,SK,0.066,FALSE,,,,,,,,,`;
 				// }
 			};
 		});
+	}
+
+	function updateCsvData(csvText) {
+		data = csvText;
+		updateStoreProperty('data', csvText);
+		handleCSVChange(csvText);
 	}
 </script>
 
@@ -539,24 +549,20 @@ Slovakia,SK,0.066,FALSE,,,,,,,,,`;
 
 	<div class="space-y-2">
 		<label for="data">Data (CSV)</label>
-		<!-- svelte-ignore element_invalid_self_closing_tag -->
 		<textarea
 			id="data"
 			name="data"
 			bind:value={data}
-			on:input={(e) => {
-				updateStoreProperty('data', e.target.value);
-				handleCSVChange(e.target.value);
-			}}
+			on:input={(e) => updateCsvData(e.target.value)}
 			class="h-32 w-full rounded border p-2 {csvError
 				? 'border-red-500'
 				: csvWarnings.length
 					? 'border-yellow-500'
 					: ''}"
 			placeholder="Paste CSV data here"
-		/>
+		></textarea>
 		<button
-			on:click={() => (data = EXAMPLE_DATA)}
+			on:click={() => updateCsvData(EXAMPLE_DATA)}
 			class="text-sm text-blue-600 hover:text-blue-800 hover:underline"
 			type="button"
 		>
