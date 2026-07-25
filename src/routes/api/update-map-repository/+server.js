@@ -5,6 +5,9 @@ import {
 	getRepoOwner,
 	serializeMapConfig
 } from '$lib/server/map-repositories';
+import mapPanelSource from '$lib/components/MapPanel.svelte?raw';
+
+const MAP_PANEL_PATH = 'src/lib/components/MapPanel.svelte';
 
 function validateRepoName(repoName) {
 	if (!repoName || !/^map-[a-zA-Z0-9-_]+$/.test(repoName)) {
@@ -29,6 +32,12 @@ function buildTreeElements(mapConfig, translations) {
 			mode: '100644',
 			type: 'blob',
 			content: serializeMapConfig(mapConfig)
+		},
+		{
+			path: MAP_PANEL_PATH,
+			mode: '100644',
+			type: 'blob',
+			content: mapPanelSource
 		}
 	];
 

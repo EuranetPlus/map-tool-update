@@ -15,6 +15,8 @@
 
 	import { translations } from '$lib/stores/translations';
 
+	const DEFAULT_LANGUAGE = 'en';
+
 	let heading;
 	let subheading;
 	let tooltip;
@@ -41,6 +43,21 @@
 	let chartHeaderRef;
 	let sourceNotesRef;
 	let totalTextHeight = 0;
+
+	function getSupportedLanguage(lang) {
+		const normalizedLang = lang?.toLowerCase();
+		const languages = languageNameTranslations[DEFAULT_LANGUAGE] || [];
+		const language = languages.find((item) => item.value === normalizedLang);
+
+		return language || languages.find((item) => item.value === DEFAULT_LANGUAGE);
+	}
+
+	function getInitialLanguage() {
+		if (typeof window === 'undefined') return getSupportedLanguage(DEFAULT_LANGUAGE);
+
+		const url = new URL(window.location.href);
+		return getSupportedLanguage(url.searchParams.get('lang') || DEFAULT_LANGUAGE);
+	}
 
 	// Function to get element's total height including margins
 	function getTotalHeight(element) {
@@ -171,10 +188,15 @@
 	onMount(async () => {
 		await fetchAndTransformGeoData();
 		const isSubApp = window.location.search.includes('view=fullscreen');
+		const initialLanguage = getInitialLanguage();
+
+		if (initialLanguage) {
+			selectedLanguage.set(initialLanguage);
+		}
 
 		if (isSubApp) {
 			// In sub-app, load translations immediately
-			await getLanguage($selectedLanguage?.value || 'en');
+			await getLanguage(initialLanguage?.value || DEFAULT_LANGUAGE);
 		} else {
 			// In main app, set initial translations
 			if ($mapConfig.translate) {

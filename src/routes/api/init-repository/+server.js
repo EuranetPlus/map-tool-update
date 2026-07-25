@@ -1,11 +1,13 @@
 import { json } from '@sveltejs/kit';
 import { Octokit } from '@octokit/rest';
 import { env } from '$env/dynamic/private';
+import mapPanelSource from '$lib/components/MapPanel.svelte?raw';
 
 // Constants
 const MAX_RETRIES = 2;
 const RETRY_DELAY = 1000;
 const REPO_CREATION_WAIT = 2000;
+const MAP_PANEL_PATH = 'src/lib/components/MapPanel.svelte';
 
 // Utility function for retrying operations
 async function retryOperation(operation, retries = MAX_RETRIES) {
@@ -90,7 +92,53 @@ export const mapConfig = writable(${JSON.stringify(mapConfig, null, 2)});`;
 		}
 	}
 
+	await upsertFile(
+		octokit,
+		user.login,
+		repoName,
+		MAP_PANEL_PATH,
+		mapPanelSource,
+		'Add URL language parameter support'
+	);
+
 	return true;
+}
+
+async function upsertFile(octokit, owner, repoName, path, content, message) {
+	try {
+		const { data: currentFile } = await retryOperation(async () => {
+			return await octokit.repos.getContent({
+				owner,
+				repo: repoName,
+				path
+			});
+		});
+
+		await retryOperation(async () => {
+			await octokit.repos.createOrUpdateFileContents({
+				owner,
+				repo: repoName,
+				path,
+				message,
+				content: Buffer.from(content).toString('base64'),
+				sha: currentFile.sha,
+				branch: 'main'
+			});
+		});
+	} catch (error) {
+		if (error.status !== 404) throw error;
+
+		await retryOperation(async () => {
+			await octokit.repos.createOrUpdateFileContents({
+				owner,
+				repo: repoName,
+				path,
+				message,
+				content: Buffer.from(content).toString('base64'),
+				branch: 'main'
+			});
+		});
+	}
 }
 
 export async function POST({ request }) {
