@@ -66,7 +66,8 @@
 	function getEmbedCode(mapId, deployUrl, embedUrl) {
 		const slugifiedId = toSlug(mapId);
 		const deployUrlWithLanguage = getDeployUrlWithLanguage(deployUrl);
-		return `<iframe title="New Map" aria-label="Map" id="${slugifiedId}" src="${deployUrlWithLanguage}" scrolling="no" frameborder="0" style="width: 0; min-width: 100% !important; border: none;" height="624"></iframe><script type="text/javascript">window.addEventListener("message",e=>{if("${embedUrl}"!==e.origin)return;let t=e.data;if(t.height){document.getElementById("${slugifiedId}").height=t.height+"px"}},!1)<\/script>`;
+		const embedOrigin = new URL(embedUrl).origin;
+		return `<iframe title="New Map" aria-label="Map" id="${slugifiedId}" src="${deployUrlWithLanguage}" scrolling="no" frameborder="0" style="width: 0; min-width: 100% !important; border: none;" height="624"></iframe><script type="text/javascript">window.addEventListener("message",e=>{if("${embedOrigin}"!==e.origin)return;let t=e.data;if(t.height){document.getElementById("${slugifiedId}").height=t.height+"px"}},!1)<\/script>`;
 	}
 
 	function validateData(repoName, mapConfig, translations) {
