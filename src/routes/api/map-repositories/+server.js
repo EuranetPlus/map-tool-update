@@ -1,6 +1,11 @@
 import { json } from '@sveltejs/kit';
 import { fetchMapConfig, getOctokit, isCandidateMapRepo } from '$lib/server/map-repositories';
 
+const repositoryNameCollator = new Intl.Collator('en', {
+	numeric: true,
+	sensitivity: 'base'
+});
+
 export async function GET() {
 	try {
 		const octokit = getOctokit();
@@ -28,7 +33,8 @@ export async function GET() {
 
 		const repositories = compatibilityChecks
 			.filter((result) => result.status === 'fulfilled')
-			.map((result) => result.value);
+			.map((result) => result.value)
+			.sort((a, b) => repositoryNameCollator.compare(a.name, b.name));
 
 		return json({ repositories });
 	} catch (error) {
