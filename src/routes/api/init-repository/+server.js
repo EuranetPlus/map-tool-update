@@ -8,7 +8,6 @@ const MAX_RETRIES = 2;
 const RETRY_DELAY = 1000;
 const REPO_CREATION_WAIT = 2000;
 const MAP_PANEL_PATH = 'src/lib/components/MapPanel.svelte';
-const NODE_VERSION = '24.x';
 
 // Utility function for retrying operations
 async function retryOperation(operation, retries = MAX_RETRIES) {
@@ -48,29 +47,6 @@ async function setupRepository(octokit, user, repoName, mapConfig) {
 	});
 
 	await new Promise((resolve) => setTimeout(resolve, REPO_CREATION_WAIT));
-
-	await retryOperation(async () => {
-		const file = {
-			owner: user.login,
-			repo: repoName,
-			path: 'package.json',
-			ref: 'main'
-		};
-		const { data } = await octokit.repos.getContent(file);
-		const packageJson = JSON.parse(Buffer.from(data.content, 'base64').toString('utf8'));
-		if (packageJson.engines?.node === NODE_VERSION) return;
-
-		packageJson.engines = { ...packageJson.engines, node: NODE_VERSION };
-		await octokit.repos.createOrUpdateFileContents({
-			owner: file.owner,
-			repo: file.repo,
-			path: file.path,
-			branch: file.ref,
-			sha: data.sha,
-			message: 'Pin map build to Node.js 24',
-			content: Buffer.from(JSON.stringify(packageJson, null, '\t') + '\n').toString('base64')
-		});
-	});
 	
 	// Update config-map.js
 	const configMapContent = `import { writable } from 'svelte/store';
