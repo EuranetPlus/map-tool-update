@@ -27,7 +27,7 @@
 			current: false
 		},
 		{ id: 'cleanup', text: 'Cleaning up temporary files', completed: false, current: false },
-		{ id: 'deploy', text: 'Deploying to Vercel', completed: false, current: false }
+		{ id: 'deploy', text: 'Starting deployment', completed: false, current: false }
 	];
 
 	const updateFlowSteps = [
@@ -35,7 +35,7 @@
 		{ id: 'translations', text: 'Generating translations (0%)', completed: false, current: false },
 		{ id: 'commit', text: 'Committing map update', completed: false, current: false },
 		{ id: 'cleanup', text: 'Cleaning up temporary files', completed: false, current: false },
-		{ id: 'deploy', text: 'Waiting for Vercel auto-deploy', completed: false, current: false }
+		{ id: 'deploy', text: 'Triggering deployment via GitHub', completed: false, current: false }
 	];
 
 	let steps = cloneSteps(createSteps);
@@ -301,7 +301,8 @@
 			deploymentUrl = deployData.projectUrl;
 			embedUrl = deployData.projectUrl;
 			updateProgressSteps(null, ['validate', 'create', 'translations', 'cleanup', 'deploy']);
-			successMessage = 'Repository created and deployed successfully!';
+			const host = deployData.provider === 'netlify' ? 'Netlify' : 'Vercel';
+			successMessage = `Repository created. Deployment initiated on ${host}.`;
 			await loadRepositories();
 		} catch (error) {
 			console.error('Error:', error);
@@ -352,7 +353,8 @@
 			}
 
 			updateProgressSteps(null, ['validate', 'translations', 'commit', 'cleanup', 'deploy']);
-			successMessage = 'Map updated. Vercel will deploy the latest commit from GitHub.';
+			const host = updateData.provider === 'netlify' ? 'Netlify' : 'Vercel';
+			successMessage = `Map updated. ${host} will deploy the latest commit from GitHub.`;
 			await loadRepositories();
 		} catch (error) {
 			console.error('Update error:', error);
