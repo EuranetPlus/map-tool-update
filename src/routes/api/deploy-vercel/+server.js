@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { Octokit } from '@octokit/rest';
+import { deployNetlifyMap, isVercelProjectLimit, isNetlifyMap } from '$lib/server/netlify-maps';
 
 // Constants
 const REPO_CHECK_MAX_ATTEMPTS = 5;
@@ -38,16 +39,14 @@ async function waitForRepo(octokit, owner, repo) {
 
 export async function POST({ request }) {
 	try {
-		// Get tokens and validate environment variables
-		const token = getVercelToken();
-		if (!token || !env.GITHUB_TOKEN || !env.GITHUB_USERNAME) {
+		if (!env.GITHUB_TOKEN || !env.GITHUB_USERNAME) {
 			throw new Error('Missing required environment variables');
 		}
 
 		// Get repository name from request
 		const { repoName } = await request.json();
-		if (!repoName) {
-			throw new Error('Repository name is required');
+		if (typeof repoName !== 'string' || !/^[a-z0-9_-]+$/i.test(repoName)) {
+			return json({ error: 'A valid map repository name is required' }, { status: 400 });
 		}
 
 		console.log('Starting Vercel deployment process...');
@@ -55,8 +54,23 @@ export async function POST({ request }) {
 		// Initialize Octokit and wait for repo
 		const octokit = new Octokit({ auth: env.GITHUB_TOKEN });
 		const repo = await waitForRepo(octokit, env.GITHUB_USERNAME, repoName);
+		// Only the one explicitly configured map in a Vercel Preview can skip Vercel.
+		if (
+			env.VERCEL_ENV === 'preview' &&
+			/^map-[a-z0-9-]+$/.test(repoName) &&
+			repoName === env.NETLIFY_PREVIEW_TEST_REPO
+		) {
+			return json(await deployNetlifyMap(octokit, repo));
+		}
+		if (
+			env.NETLIFY_FALLBACK_ENABLED === 'true' &&
+			(await isNetlifyMap(octokit, env.GITHUB_USERNAME, repoName))
+		) {
+			return json(await deployNetlifyMap(octokit, repo));
+		}
 
 		// Create Vercel project
+		const token = getVercelToken();
 		const projectResponse = await fetch('https://api.vercel.com/v9/projects', {
 			method: 'POST',
 			headers: {
@@ -92,6 +106,12 @@ export async function POST({ request }) {
 		});
 
 		const projectData = await projectResponse.json();
+		if (
+			env.NETLIFY_FALLBACK_ENABLED === 'true' &&
+			isVercelProjectLimit(projectResponse, projectData.error)
+		) {
+			return json(await deployNetlifyMap(octokit, repo));
+		}
 		if (!projectResponse.ok || !projectData.id) {
 			throw new Error(projectData.error?.message || 'Failed to create Vercel project');
 		}
@@ -121,6 +141,7 @@ export async function POST({ request }) {
 		}
 
 		return json({
+			provider: 'vercel',
 			message: 'Project created and deployment initiated',
 			deploymentUrl: deployData.url,
 			projectUrl: `https://${repoName}.vercel.app/?view=fullscreen` // Single source of URL construction
@@ -129,8 +150,7 @@ export async function POST({ request }) {
 		console.error('Deployment error:', error);
 		return json(
 			{
-				error: error.message || 'Failed to deploy',
-				details: error.response?.data || error.stack
+				error: error.message || 'Failed to deploy'
 			},
 			{ status: error.status || 500 }
 		);
