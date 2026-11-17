@@ -2,25 +2,10 @@ import { env } from '$env/dynamic/private';
 
 const CONFIG_PATH = 'netlify.toml';
 const MARKER_PATH = '.map-tool-netlify';
-const BUILD_CONFIG =
-	'[build]\n  command = "npm run build"\n  publish = "build"\n' +
-	'[build.environment]\n  NODE_VERSION = "24"\n';
+const BUILD_COMMAND = "api_backup=$(mktemp -d) && trap 'if [ -d \"$api_backup/api\" ]; then mv \"$api_backup/api\" src/routes/api; fi; rmdir \"$api_backup\"' EXIT && mv src/routes/api \"$api_backup/api\" && npm run build";
+const BUILD_CONFIG = "[build]\n  command = \"api_backup=$(mktemp -d) && trap 'if [ -d \\\"$api_backup/api\\\" ]; then mv \\\"$api_backup/api\\\" src/routes/api; fi; rmdir \\\"$api_backup\\\"' EXIT && mv src/routes/api \\\"$api_backup/api\\\" && npm run build\"\n  publish = \"build\"\n[build.environment]\n  NODE_VERSION = \"24\"\n";
 
-// The map reads its data and language files in the browser. Publish only the
-// client bundle and static assets, leaving the editor's API on Vercel.
-const SVELTE_CONFIG = `export default {
-	kit: {
-		adapter: {
-			name: 'netlify-static-map',
-			async adapt(builder) {
-				builder.rimraf('build');
-				builder.writeClient('build');
-				await builder.generateFallback('build/index.html');
-			}
-		}
-	}
-};
-`;
+const SVELTE_CONFIG = "import { createHash } from 'node:crypto';\nimport { readFile, writeFile } from 'node:fs/promises';\n\nexport default {\n\tkit: {\n\t\tadapter: {\n\t\t\tname: 'netlify-static-map',\n\t\t\tasync adapt(builder) {\n\t\t\t\tbuilder.rimraf('build');\n\t\t\t\tbuilder.writeClient('build');\n\t\t\t\tawait builder.generateFallback('build/index.html');\n\t\t\t\tconst html = await readFile('build/index.html', 'utf8');\n\t\t\t\tconst hashes = [...html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)]\n\t\t\t\t\t.filter(([, source]) => source.trim())\n\t\t\t\t\t.map(([, source]) => \"'sha256-\" + createHash('sha256')\n\t\t\t\t\t\t.update(source.replace(/\\r\\n?/g, '\\n')).digest('base64') + \"'\");\n\t\t\t\tawait writeFile('build/_headers', \"/*\\n  Content-Security-Policy: script-src 'self' \" + hashes.join(' ') + \"\\n\");\n\t\t\t}\n\t\t}\n\t}\n};\n";
 
 export function isVercelProjectLimit(response, error) {
 	if (![400, 403, 409].includes(response.status)) return false;
@@ -136,7 +121,7 @@ export async function deployNetlifyMap(octokit, repository) {
 			installation_id: installationId,
 			branch: 'main',
 			private: repository.private,
-			cmd: 'npm run build',
+			cmd: BUILD_COMMAND,
 			dir: 'build'
 		}
 	});
