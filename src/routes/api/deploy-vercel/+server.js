@@ -71,45 +71,52 @@ export async function POST({ request }) {
 
 		// Create Vercel project
 		const token = getVercelToken();
-		const projectResponse = await fetch('https://api.vercel.com/v9/projects', {
-			method: 'POST',
-			headers: {
-				Authorization: `Bearer ${token}`,
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({
-				name: repoName,
-				framework: 'svelte',
-				gitRepository: {
-					type: 'github',
-					repo: `${env.GITHUB_USERNAME}/${repoName}`,
-					repoId: repo.id.toString()
-				},
-				buildCommand: 'npm run build',
-				devCommand: 'npm run dev',
-				outputDirectory: '.svelte-kit',
-				environmentVariables: [
-					{
-						key: 'GITHUB_TOKEN',
-						value: env.GITHUB_TOKEN,
-						type: 'encrypted',
-						target: ['production', 'preview', 'development']
+		const simulateProjectLimit =
+			env.VERCEL_ENV === 'preview' &&
+			env.VERCEL_GIT_COMMIT_REF === 'test/netlify-preview' &&
+			repoName === 'map-netlify-quota-qa-20261117';
+		const projectResponse = simulateProjectLimit
+			? Response.json({ error: { code: 'project_limit_reached', message: 'Project limit reached.' } }, { status: 403 })
+			: await fetch('https://api.vercel.com/v9/projects', {
+					method: 'POST',
+					headers: {
+						Authorization: `Bearer ${token}`,
+						'Content-Type': 'application/json'
 					},
-					{
-						key: 'GITHUB_USERNAME',
-						value: env.GITHUB_USERNAME,
-						type: 'plain',
-						target: ['production', 'preview', 'development']
-					}
-				]
-			})
-		});
+					body: JSON.stringify({
+						name: repoName,
+						framework: 'svelte',
+						gitRepository: {
+							type: 'github',
+							repo: `${env.GITHUB_USERNAME}/${repoName}`,
+							repoId: repo.id.toString()
+						},
+						buildCommand: 'npm run build',
+						devCommand: 'npm run dev',
+						outputDirectory: '.svelte-kit',
+						environmentVariables: [
+							{
+								key: 'GITHUB_TOKEN',
+								value: env.GITHUB_TOKEN,
+								type: 'encrypted',
+								target: ['production', 'preview', 'development']
+							},
+							{
+								key: 'GITHUB_USERNAME',
+								value: env.GITHUB_USERNAME,
+								type: 'plain',
+								target: ['production', 'preview', 'development']
+							}
+						]
+					})
+				});
 
 		const projectData = await projectResponse.json();
 		if (
 			env.NETLIFY_FALLBACK_ENABLED === 'true' &&
 			isVercelProjectLimit(projectResponse, projectData.error)
 		) {
+			if (simulateProjectLimit) console.info('Preview QA: simulated Vercel project limit triggered Netlify fallback');
 			return json(await deployNetlifyMap(octokit, repo));
 		}
 		if (!projectResponse.ok || !projectData.id) {
