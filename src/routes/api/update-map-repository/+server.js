@@ -6,6 +6,7 @@ import {
 	serializeMapConfig
 } from '$lib/server/map-repositories';
 import mapPanelSource from '$lib/components/MapPanel.svelte?raw';
+import { getNetlifyMap } from '$lib/server/netlify-maps';
 
 const MAP_PANEL_PATH = 'src/lib/components/MapPanel.svelte';
 
@@ -67,6 +68,10 @@ export async function POST({ request }) {
 		const owner = getRepoOwner();
 		const repo = repoName;
 		const branch = 'main';
+		const deployment = (await getNetlifyMap(octokit, owner, repo)) ?? {
+			provider: 'vercel',
+			projectUrl: `https://${repoName}.vercel.app/?view=fullscreen`
+		};
 
 		const { data: ref } = await octokit.git.getRef({
 			owner,
@@ -108,7 +113,7 @@ export async function POST({ request }) {
 			message: 'Map repository updated successfully',
 			commitSha: commit.sha,
 			repoUrl: `https://github.com/${owner}/${repoName}`,
-			projectUrl: `https://${repoName}.vercel.app/?view=fullscreen`
+			...deployment
 		});
 	} catch (error) {
 		console.error('Failed to update map repository:', error);
