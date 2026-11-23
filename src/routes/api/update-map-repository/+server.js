@@ -1,20 +1,16 @@
 import { json } from '@sveltejs/kit';
 import {
 	CONFIG_PATH,
+	fetchMapConfig,
 	getOctokit,
 	getRepoOwner,
-	serializeMapConfig
+	serializeMapConfig,
+	validateMapRepoName
 } from '$lib/server/map-repositories';
 import mapPanelSource from '$lib/components/MapPanel.svelte?raw';
 import { getNetlifyMap } from '$lib/server/netlify-maps';
 
 const MAP_PANEL_PATH = 'src/lib/components/MapPanel.svelte';
-
-function validateRepoName(repoName) {
-	if (!repoName || !/^map-[a-zA-Z0-9-_]+$/.test(repoName)) {
-		throw new Error('A valid map repository name is required');
-	}
-}
 
 function validatePayload(mapConfig, translations) {
 	if (!mapConfig || typeof mapConfig !== 'object' || Array.isArray(mapConfig)) {
@@ -61,13 +57,14 @@ function buildTreeElements(mapConfig, translations) {
 export async function POST({ request }) {
 	try {
 		const { repoName, mapConfig, translations } = await request.json();
-		validateRepoName(repoName);
+		validateMapRepoName(repoName);
 		validatePayload(mapConfig, translations);
 
 		const octokit = getOctokit();
 		const owner = getRepoOwner();
 		const repo = repoName;
 		const branch = 'main';
+		await fetchMapConfig(octokit, repoName);
 		const deployment = (await getNetlifyMap(octokit, owner, repo)) ?? {
 			provider: 'vercel',
 			projectUrl: `https://${repoName}.vercel.app/?view=fullscreen`
