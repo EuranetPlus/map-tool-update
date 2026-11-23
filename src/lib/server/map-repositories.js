@@ -23,10 +23,21 @@ export function getRepoOwner() {
 export function isCandidateMapRepo(repo) {
 	return (
 		repo?.owner?.login === getRepoOwner() &&
-		repo.name.startsWith('map-') &&
 		!EXCLUDED_REPOS.has(repo.name) &&
 		!repo.archived
 	);
+}
+
+export function validateMapRepoName(repoName) {
+	if (
+		typeof repoName !== 'string' ||
+		!/^[a-zA-Z0-9_.-]+$/.test(repoName) ||
+		repoName === '.' ||
+		repoName === '..' ||
+		EXCLUDED_REPOS.has(repoName.toLowerCase())
+	) {
+		throw new Error('A valid map repository name is required');
+	}
 }
 
 export function decodeGitHubContent(file) {
