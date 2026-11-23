@@ -1,16 +1,10 @@
 import { json } from '@sveltejs/kit';
-import { fetchMapConfig, getOctokit, getRepoOwner } from '$lib/server/map-repositories';
-
-function validateRepoName(repoName) {
-	if (!repoName || !/^map-[a-zA-Z0-9-_]+$/.test(repoName)) {
-		throw new Error('A valid map repository name is required');
-	}
-}
+import { fetchMapConfig, getOctokit, getRepoOwner, validateMapRepoName } from '$lib/server/map-repositories';
 
 export async function POST({ request }) {
 	try {
 		const { repoName } = await request.json();
-		validateRepoName(repoName);
+		validateMapRepoName(repoName);
 
 		const octokit = getOctokit();
 		const { config } = await fetchMapConfig(octokit, repoName);
