@@ -8,8 +8,16 @@ const BUILD_CONFIG = "[build]\n  command = \"api_backup=$(mktemp -d) && trap 'if
 const SVELTE_CONFIG = "import { createHash } from 'node:crypto';\nimport { readFile, writeFile } from 'node:fs/promises';\n\nexport default {\n\tkit: {\n\t\tadapter: {\n\t\t\tname: 'netlify-static-map',\n\t\t\tasync adapt(builder) {\n\t\t\t\tbuilder.rimraf('build');\n\t\t\t\tbuilder.writeClient('build');\n\t\t\t\tawait builder.generateFallback('build/index.html');\n\t\t\t\tconst html = await readFile('build/index.html', 'utf8');\n\t\t\t\tawait writeFile('build/index.html', html.replace('</head>', '<style>iframe#nl-badge-frame { display: none !important; }</style></head>'));\n\t\t\t\tconst hashes = [...html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)]\n\t\t\t\t\t.filter(([, source]) => source.trim())\n\t\t\t\t\t.map(([, source]) => \"'sha256-\" + createHash('sha256')\n\t\t\t\t\t\t.update(source.replace(/\\r\\n?/g, '\\n')).digest('base64') + \"'\");\n\t\t\t\tawait writeFile('build/_headers', \"/*\\n  Content-Security-Policy: script-src 'self' \" + hashes.join(' ') + \"\\n\");\n\t\t\t}\n\t\t}\n\t}\n};\n";
 
 export function isVercelProjectLimit(response, error) {
-	if (![400, 403, 409].includes(response.status)) return false;
+	if (response.status < 400 || response.status >= 500) return false;
 	const code = error?.code;
+	const message = error?.message ?? '';
+	if (
+		/^The project [a-z0-9_-]+ could not be created because this team has reached the \d+ project Hobby limit\.?$/i.test(
+			message
+		)
+	) {
+		return true;
+	}
 	return (
 		code === 'project_limit_reached' ||
 		((code === 'forbidden' || code === 'bad_request') &&
