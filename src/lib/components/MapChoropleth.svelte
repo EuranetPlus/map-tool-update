@@ -454,7 +454,13 @@
 
 {#if $dataReady && countriesAll && countriesAll.features}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div id="map" class="relative" on:mousemove={handleMouseMove} bind:clientHeight={$MAP_WIDTH}>
+	<div
+		id="map"
+		class="relative"
+		style="max-width: max(0px, calc((100vh - var(--text-height, 0px)) * {width / height}));"
+		on:mousemove={handleMouseMove}
+		bind:clientHeight={$MAP_WIDTH}
+	>
 		{#if mapConfig.datasetType == 'values'}
 			{#if mapConfig.scaleBarAvailable && mapConfig.parsedData && mapConfig.parsedData.length > 0}
 				<Scale classes={colorScheme} {clusters} {scaleMin} {scaleMax} {mapConfig} />
@@ -559,9 +565,16 @@
 <style>
 	#map {
 		position: relative;
+		width: 100%;
+		margin-inline: auto;
+	}
+
+	#map :global(.scale) {
+		max-width: calc(100% - 1.5rem);
 	}
 
 	svg {
+		display: block;
 		width: 100%;
 		height: auto;
 	}

@@ -8,6 +8,7 @@ import {
 	validateMapRepoName
 } from '$lib/server/map-repositories';
 import mapPanelSource from '$lib/components/MapPanel.svelte?raw';
+import mapChoroplethSource from '$lib/components/MapChoropleth.svelte?raw';
 import { getNetlifyMap } from '$lib/server/netlify-maps';
 
 const MAP_PANEL_PATH = 'src/lib/components/MapPanel.svelte';
@@ -35,6 +36,12 @@ function buildTreeElements(mapConfig, translations) {
 			mode: '100644',
 			type: 'blob',
 			content: mapPanelSource
+		},
+		{
+			path: 'src/lib/components/MapChoropleth.svelte',
+			mode: '100644',
+			type: 'blob',
+			content: mapChoroplethSource
 		}
 	];
 

@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { Octokit } from '@octokit/rest';
 import { env } from '$env/dynamic/private';
 import mapPanelSource from '$lib/components/MapPanel.svelte?raw';
+import mapChoroplethSource from '$lib/components/MapChoropleth.svelte?raw';
 
 // Constants
 const MAX_RETRIES = 2;
@@ -99,6 +100,15 @@ export const mapConfig = writable(${JSON.stringify(mapConfig, null, 2)});`;
 		MAP_PANEL_PATH,
 		mapPanelSource,
 		'Add URL language parameter support'
+	);
+
+	await upsertFile(
+		octokit,
+		user.login,
+		repoName,
+		'src/lib/components/MapChoropleth.svelte',
+		mapChoroplethSource,
+		'Keep legend within the visible map'
 	);
 
 	return true;
