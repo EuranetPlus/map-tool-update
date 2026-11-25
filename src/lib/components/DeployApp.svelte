@@ -154,7 +154,7 @@
 			successMessage =
 				`Loaded ${selectedRepoName}. You can now edit the map and update it.` +
 				(data.format === 'legacy'
-					? ' This older map keeps its existing frontend. Use its original four color palettes, five classes and rounded percentages; newer display options require a frontend migration.'
+					? ' This older map will be upgraded to the current map layout when you update it. Its existing address and embeds will remain valid.'
 					: '');
 		} catch (error) {
 			console.error('Failed to load selected repository:', error);

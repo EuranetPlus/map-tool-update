@@ -15,6 +15,7 @@
 
 	import { translations } from '$lib/stores/translations';
 
+	export let standalone = false;
 	const DEFAULT_LANGUAGE = 'en';
 
 	let heading;
@@ -43,6 +44,18 @@
 	let chartHeaderRef;
 	let sourceNotesRef;
 	let totalTextHeight = 0;
+
+	onMount(() => {
+		const updateTextHeight = () => {
+			totalTextHeight =
+				getTotalHeight(headerRef) + getTotalHeight(chartHeaderRef) + getTotalHeight(sourceNotesRef);
+		};
+		const observer = new ResizeObserver(updateTextHeight);
+		for (const element of [headerRef, chartHeaderRef, sourceNotesRef]) {
+			if (element) observer.observe(element);
+		}
+		return () => observer.disconnect();
+	});
 
 	function getSupportedLanguage(lang) {
 		const normalizedLang = lang?.toLowerCase();
@@ -101,7 +114,7 @@
 
 	async function loadTranslationFile(lang) {
 		try {
-			const isSubApp = window.location.search.includes('view=fullscreen');
+			const isSubApp = standalone || window.location.search.includes('view=fullscreen');
 
 			if (isSubApp) {
 				// In sub-app, load from static files
@@ -154,7 +167,7 @@
 
 	// To this:
 	$: if ($translations && Object.keys($translations).length > 0 && $selectedLanguage?.value) {
-		const isSubApp = window.location.search.includes('view=fullscreen');
+		const isSubApp = standalone || window.location.search.includes('view=fullscreen');
 		if (!isSubApp) {
 			// Only trigger for main app
 			getLanguage($selectedLanguage.value);
@@ -162,7 +175,7 @@
 	}
 
 	// Get the view parameter from the page store
-	$: isFullscreen = $page.url.searchParams.get('view') === 'fullscreen';
+	$: isFullscreen = standalone || $page.url.searchParams.get('view') === 'fullscreen';
 
 	// Send map height to parent window
 	// $: {
@@ -187,7 +200,7 @@
 
 	onMount(async () => {
 		await fetchAndTransformGeoData();
-		const isSubApp = window.location.search.includes('view=fullscreen');
+		const isSubApp = standalone || window.location.search.includes('view=fullscreen');
 		const initialLanguage = getInitialLanguage();
 
 		if (initialLanguage) {
@@ -214,7 +227,7 @@
 			shouldUpdateMap.set(false);
 
 			let data;
-			const isSubApp = window.location.search.includes('view=fullscreen');
+			const isSubApp = standalone || window.location.search.includes('view=fullscreen');
 			// console.log('Is sub app:', isSubApp, 'Loading language:', lang);
 
 			if (isSubApp) {
@@ -293,7 +306,7 @@
 			console.error('Current state:', {
 				selectedLanguage: lang,
 				mapConfig: $mapConfig,
-				isSubApp: window.location.search.includes('view=fullscreen')
+				isSubApp: standalone || window.location.search.includes('view=fullscreen')
 			});
 			shouldUpdateMap.set(true); // Make sure to reset this even on error
 		}
