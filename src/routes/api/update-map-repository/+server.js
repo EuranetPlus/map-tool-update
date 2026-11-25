@@ -10,7 +10,8 @@ import {
 } from '$lib/server/map-repositories';
 import mapPanelSource from '$lib/components/MapPanel.svelte?raw';
 import mapChoroplethSource from '$lib/components/MapChoropleth.svelte?raw';
-import { buildLegacyTree } from '$lib/server/legacy-map-repositories';
+import { buildMigrationTree } from '$lib/server/migrate-legacy-map';
+import { mapRuntimeFiles } from '$lib/server/map-runtime';
 import { getNetlifyMap } from '$lib/server/netlify-maps';
 
 const MAP_PANEL_PATH = 'src/lib/components/MapPanel.svelte';
@@ -74,23 +75,6 @@ export async function POST({ request }) {
 		const repo = repoName;
 		const branch = 'main';
 		const loaded = await fetchMapConfig(octokit, repoName);
-		const treeElements =
-			loaded.format === 'legacy'
-				? await buildLegacyTree(mapConfig, translations, loaded.legacy, async (lang) => {
-						try {
-							const { data } = await octokit.repos.getContent({
-								owner,
-								repo,
-								path: `static/languages/${lang}.json`,
-								ref: branch
-							});
-							return JSON.parse(decodeGitHubContent(data));
-						} catch (error) {
-							if (error.status !== 404) throw error;
-							return {};
-						}
-					})
-				: buildTreeElements(mapConfig, translations);
 		const deployment = (await getNetlifyMap(octokit, owner, repo)) ?? {
 			provider: 'vercel',
 			projectUrl: `https://${repoName}.vercel.app/?view=fullscreen`
@@ -103,6 +87,31 @@ export async function POST({ request }) {
 		});
 
 		const baseSha = ref.object.sha;
+		const treeElements =
+			loaded.format === 'legacy'
+				? await buildMigrationTree({
+						config: mapConfig,
+						translations,
+						runtimeFiles: mapRuntimeFiles,
+						entries: (await octokit.git.getTree({ owner, repo, tree_sha: baseSha, recursive: '1' }))
+							.data.tree,
+						readLanguage: async (lang) => {
+							try {
+								const { data } = await octokit.repos.getContent({
+									owner,
+									repo,
+									path: `static/languages/${lang}.json`,
+									ref: baseSha
+								});
+								return JSON.parse(decodeGitHubContent(data));
+							} catch (error) {
+								if (error.status !== 404) throw error;
+								return {};
+							}
+						}
+					})
+				: buildTreeElements(mapConfig, translations);
+
 		const { data: baseCommit } = await octokit.git.getCommit({
 			owner,
 			repo,
@@ -136,7 +145,8 @@ export async function POST({ request }) {
 			message: 'Map repository updated successfully',
 			commitSha: commit.sha,
 			repoUrl: `https://github.com/${owner}/${repoName}`,
-			...deployment
+			...deployment,
+			migrated: loaded.format === 'legacy'
 		});
 	} catch (error) {
 		console.error('Failed to update map repository:', error);
