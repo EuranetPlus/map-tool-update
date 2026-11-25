@@ -1,5 +1,12 @@
 import { Octokit } from '@octokit/rest';
 import { env } from '$env/dynamic/private';
+import {
+	LEGACY_FEATURES_PATH,
+	LEGACY_TEXT_PATH,
+	LEGACY_DATA_PATH,
+	parseLegacyFeatures,
+	normalizeLegacyMap
+} from './legacy-map-repositories';
 
 const CONFIG_PATH = 'src/lib/stores/config-map.js';
 const EXCLUDED_REPOS = new Set(['map-tool', 'map-tool-update']);
@@ -21,11 +28,7 @@ export function getRepoOwner() {
 }
 
 export function isCandidateMapRepo(repo) {
-	return (
-		repo?.owner?.login === getRepoOwner() &&
-		!EXCLUDED_REPOS.has(repo.name) &&
-		!repo.archived
-	);
+	return repo?.owner?.login === getRepoOwner() && !EXCLUDED_REPOS.has(repo.name) && !repo.archived;
 }
 
 export function validateMapRepoName(repoName) {
@@ -83,12 +86,29 @@ export function serializeMapConfig(config) {
 
 export async function fetchMapConfig(octokit, repoName) {
 	const owner = getRepoOwner();
-	const { data } = await octokit.repos.getContent({
-		owner,
-		repo: repoName,
-		path: CONFIG_PATH,
-		ref: 'main'
-	});
+	let data;
+	try {
+		({ data } = await octokit.repos.getContent({
+			owner,
+			repo: repoName,
+			path: CONFIG_PATH,
+			ref: 'main'
+		}));
+	} catch (error) {
+		if (error.status !== 404) throw error;
+		const read = async (path) => {
+			const result = await octokit.repos.getContent({ owner, repo: repoName, path, ref: 'main' });
+			return decodeGitHubContent(result.data);
+		};
+		const features = parseLegacyFeatures(await read(LEGACY_FEATURES_PATH));
+		const [textContent, csv] = await Promise.all([read(LEGACY_TEXT_PATH), read(LEGACY_DATA_PATH)]);
+		const text = JSON.parse(textContent);
+		return {
+			config: normalizeLegacyMap(features, text, csv),
+			format: 'legacy',
+			legacy: { features, text }
+		};
+	}
 
 	if (Array.isArray(data)) {
 		throw new Error('Map config path points to a directory');
@@ -99,6 +119,7 @@ export async function fetchMapConfig(octokit, repoName) {
 
 	return {
 		config,
+		format: 'current',
 		content,
 		sha: data.sha
 	};

@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import {
 	CONFIG_PATH,
+	decodeGitHubContent,
 	fetchMapConfig,
 	getOctokit,
 	getRepoOwner,
@@ -9,6 +10,7 @@ import {
 } from '$lib/server/map-repositories';
 import mapPanelSource from '$lib/components/MapPanel.svelte?raw';
 import mapChoroplethSource from '$lib/components/MapChoropleth.svelte?raw';
+import { buildLegacyTree } from '$lib/server/legacy-map-repositories';
 import { getNetlifyMap } from '$lib/server/netlify-maps';
 
 const MAP_PANEL_PATH = 'src/lib/components/MapPanel.svelte';
@@ -71,7 +73,24 @@ export async function POST({ request }) {
 		const owner = getRepoOwner();
 		const repo = repoName;
 		const branch = 'main';
-		await fetchMapConfig(octokit, repoName);
+		const loaded = await fetchMapConfig(octokit, repoName);
+		const treeElements =
+			loaded.format === 'legacy'
+				? await buildLegacyTree(mapConfig, translations, loaded.legacy, async (lang) => {
+						try {
+							const { data } = await octokit.repos.getContent({
+								owner,
+								repo,
+								path: `static/languages/${lang}.json`,
+								ref: branch
+							});
+							return JSON.parse(decodeGitHubContent(data));
+						} catch (error) {
+							if (error.status !== 404) throw error;
+							return {};
+						}
+					})
+				: buildTreeElements(mapConfig, translations);
 		const deployment = (await getNetlifyMap(octokit, owner, repo)) ?? {
 			provider: 'vercel',
 			projectUrl: `https://${repoName}.vercel.app/?view=fullscreen`
@@ -94,7 +113,7 @@ export async function POST({ request }) {
 			owner,
 			repo,
 			base_tree: baseCommit.tree.sha,
-			tree: buildTreeElements(mapConfig, translations)
+			tree: treeElements
 		});
 
 		const { data: commit } = await octokit.git.createCommit({
