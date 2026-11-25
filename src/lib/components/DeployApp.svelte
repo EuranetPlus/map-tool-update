@@ -151,7 +151,11 @@
 			mapConfig.set(data.config);
 			translations.set({});
 			repoUrl = data.repoUrl;
-			successMessage = `Loaded ${selectedRepoName}. You can now edit the map and update it.`;
+			successMessage =
+				`Loaded ${selectedRepoName}. You can now edit the map and update it.` +
+				(data.format === 'legacy'
+					? ' This older map keeps its existing frontend. Use its original four color palettes, five classes and rounded percentages; newer display options require a frontend migration.'
+					: '');
 		} catch (error) {
 			console.error('Failed to load selected repository:', error);
 			errorMessage = error.message;
@@ -187,10 +191,7 @@
 			const progress = Math.round((completedLanguages.length / TOTAL_LANGUAGES) * 100);
 			steps = steps.map((step) => ({
 				...step,
-				text:
-					step.id === 'translations'
-						? `Generating translations (${progress}%)`
-						: step.text
+				text: step.id === 'translations' ? `Generating translations (${progress}%)` : step.text
 			}));
 
 			hasMore = data.type === 'complete' ? false : data.hasMore;
